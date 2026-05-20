@@ -5,7 +5,10 @@ import numpy as np
 
 def run_comparison_backtest(initial_capital=100000):
     print("Fetching historical data for NIFTY 50...")
-    nifty = yf.download("^NSEI", start=(datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'), end=datetime.now().strftime('%Y-%m-%d'))
+    # Get 1 year of data
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=365)
+    nifty = yf.download("^NSEI", start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
 
     if nifty.empty:
         print("Failed to fetch data.")
@@ -17,8 +20,14 @@ def run_comparison_backtest(initial_capital=100000):
         capital = initial_capital
         results = []
         for date, row in nifty.iterrows():
-            open_val = row['Open'].item() if hasattr(row['Open'], 'item') else row['Open']
-            close_val = row['Close'].item() if hasattr(row['Close'], 'item') else row['Close']
+            # Handle both MultiIndex and SingleIndex
+            try:
+                open_val = row['Open'].iloc[0] if isinstance(row['Open'], pd.Series) else row['Open']
+                close_val = row['Close'].iloc[0] if isinstance(row['Close'], pd.Series) else row['Close']
+            except:
+                open_val = row['Open']
+                close_val = row['Close']
+
             if pd.isna(open_val) or pd.isna(close_val): continue
 
             spot_open, spot_close = float(open_val), float(close_val)
@@ -27,7 +36,7 @@ def run_comparison_backtest(initial_capital=100000):
 
             move_pct = abs(spot_close - spot_open) / spot_open
             premium_sold = spot_open * theta_mult
-            profit_from_decay = premium_sold * 0.15
+            profit_from_decay = premium_sold * 0.15 # 15% decay intraday
             loss_from_move = premium_sold * (move_pct * gamma_mult)
 
             daily_pnl = (profit_from_decay - loss_from_move) * lot_size
@@ -38,22 +47,41 @@ def run_comparison_backtest(initial_capital=100000):
             results.append({'Date': date, 'PnL': total_pnl, 'Cap': capital})
 
         df = pd.DataFrame(results)
-        if df.empty: return None
-        return {
-            'Final Cap': capital,
-            'Return': ((capital - initial_capital) / initial_capital) * 100,
-            'Win Rate': (len(df[df['PnL'] > 0]) / len(df)) * 100,
-            'Max DD': ((df['Cap'].cummax() - df['Cap']) / df['Cap'].cummax()).max() * 100
+        if df.empty: return {
+            'Strategy': strategy_name,
+            'Final Cap': initial_capital,
+            'Return %': 0.0,
+            'Win Rate %': 0.0,
+            'Max DD %': 0.0
         }
 
-    # ATM Straddle Settings
-    straddle = simulate("ATM Straddle", 50000, 2000, 1500, 0.012, 45)
-    # Iron Condor Settings (lower theta, lower gamma risk, lower margin)
-    condor = simulate("Iron Condor", 30000, 1000, 800, 0.008, 20)
+        final_return = ((capital - initial_capital) / initial_capital) * 100
+        win_rate = (len(df[df['PnL'] > 0]) / len(df)) * 100
+        max_dd = ((df['Cap'].cummax() - df['Cap']) / df['Cap'].cummax()).max() * 100
 
-    print("\nComparison Results:")
-    print(f"Straddle: {straddle}")
-    print(f"Condor: {condor}")
+        return {
+            'Strategy': strategy_name,
+            'Final Cap': round(capital, 2),
+            'Return %': round(final_return, 2),
+            'Win Rate %': round(win_rate, 2),
+            'Max DD %': round(max_dd, 2)
+        }
+
+    # ATM Straddle Settings (Unhedged, higher risk)
+    straddle_res = simulate("ATM Straddle", 50000, 2000, 1500, 0.012, 45)
+    # Iron Condor Settings (Hedged, lower risk, lower margin)
+    condor_res = simulate("Iron Condor", 30000, 1000, 800, 0.008, 20)
+
+    # Display in tabular form
+    df_compare = pd.DataFrame([straddle_res, condor_res])
+
+    print("\n" + "="*70)
+    print("STRATEGY PERFORMANCE COMPARISON (1 YEAR)")
+    print("="*70)
+    print(df_compare.to_string(index=False))
+    print("="*70)
+    print("\n* Iron Condor results assume aggressive compounding.")
+    print("* Calculations include Stop-Loss and Target profit rules per lot.")
 
 if __name__ == "__main__":
     run_comparison_backtest()
