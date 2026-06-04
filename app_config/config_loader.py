@@ -14,7 +14,7 @@ class Config:
             load_dotenv()
         return cls._instance
 
-    def load_config(self, config_path: str = "config/config.yaml") -> None:
+    def load_config(self, config_path: str = "app_config/config.yaml") -> None:
         """Loads configuration from a YAML file and overrides with environment variables."""
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"Configuration file not found at {config_path}")

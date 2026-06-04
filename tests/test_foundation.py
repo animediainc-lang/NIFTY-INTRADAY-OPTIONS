@@ -1,13 +1,13 @@
 import os
 import unittest
-from config.config_loader import Config
+from app_config.config_loader import Config
 import logging
 
 class TestFoundation(unittest.TestCase):
     def setUp(self):
         self.config = Config()
         # Create a temporary config file for testing
-        self.test_config_path = "config/test_config.yaml"
+        self.test_config_path = "app_config/test_config.yaml"
         with open(self.test_config_path, 'w') as f:
             f.write("""
 test:
