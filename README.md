@@ -3,29 +3,38 @@
 ## Module 1: Project Foundation
 - **Configuration Management:** Singleton `app_config/config_loader.py`.
 - **Logging System:** Centralized `logger.py` with rotation.
-- **Project Structure:** Organized into functional directories.
 
 ## Module 2: Market Data Layer
-- **Breeze Client:** SDK wrapper for REST APIs and session management.
 - **WebSocket Manager:** Real-time tick streaming with reconnection logic.
-- **Candle Manager:** Incremental OHLC generation (1m, 3m, 5m).
+- **Candle Manager:** Optimized incremental OHLC generation (1m, 3m, 5m).
 
 ## Module 3: Pre-Market Analysis Layer
+- **Pre-Market Analyzer:** Logic for PDH/PDL, PCR, and Max Pain.
+
+## Module 4: Strategy Engine
 
 ### Architecture Explanation
-The Pre-market Analysis Layer calculates critical market context before the trading session starts.
+The Strategy Engine implements the core trading logic, designed to be modular and extensible.
 
-- **Pre-Market Analyzer (`data/pre_market_analyzer.py`):**
-  - **Previous Day Analysis:** Fetches historical data to calculate PDH (Previous Day High), PDL (Previous Day Low), and PDC (Previous Day Close).
-  - **Option Chain Analysis:** Calculates PCR (Put Call Ratio) and Max Pain to gauge market sentiment and potential reversal zones.
-  - **India VIX:** (Planned) Integrated into the analysis to adjust risk parameters.
-  - **Sentiment:** A stub for global market sentiment integration.
+- **Base Strategy (`strategies/base_strategy.py`):** An abstract base class that defines the interface for all strategies, ensuring consistency in entry/exit checks and data handling.
+- **Indicators (`strategies/indicators.py`):** A collection of optimized technical indicator functions (VWAP, EMA, HHHL) used by the strategies.
+- **Implemented Strategies:**
+  - **Momentum Breakout (Strategy A):** Focuses on price breakout above VWAP with volume and OI confirmation.
+  - **Trend Continuation (Strategy B):** Captures pullbacks to the EMA zone within an established trend.
+  - **Opening Range Breakout (Strategy C):** Trades the break of the initial 15-minute range with volume support.
 
 ### Testing Instructions
-Run all tests including analysis tests:
+Verify strategy signals with mock data:
 ```bash
-python3 -m pytest tests/test_foundation.py tests/test_market_data.py tests/test_analysis.py
+python3 -m pytest tests/test_strategies.py
 ```
 
-### Deployment Instructions
-The `main.py` entry point now automatically executes the pre-market analysis sequence upon startup. Ensure your `app_config/config.yaml` or `.env` file contains the relevant expiry date for Nifty options.
+### Folder Structure
+```
+/strategies
+  - base_strategy.py
+  - indicators.py
+  - momentum_breakout.py
+  - trend_continuation.py
+  - opening_range_breakout.py
+```
