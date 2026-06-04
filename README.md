@@ -1,40 +1,41 @@
 # Nifty Intraday Options Trading Bot (Breeze API)
 
 ## Module 1: Project Foundation
-- **Configuration Management:** Singleton `app_config/config_loader.py`.
-- **Logging System:** Centralized `logger.py` with rotation.
+- **Configuration:** Singleton `app_config/config_loader.py`.
+- **Logging:** Centralized `logger.py`.
 
 ## Module 2: Market Data Layer
-- **WebSocket Manager:** Real-time tick streaming with reconnection logic.
-- **Candle Manager:** Optimized incremental OHLC generation (1m, 3m, 5m).
+- **WebSocket:** Real-time ticks with reconnection.
+- **Candles:** Incremental OHLCV+OI generation.
 
 ## Module 3: Pre-Market Analysis Layer
-- **Pre-Market Analyzer:** Logic for PDH/PDL, PCR, and Max Pain.
+- **Analyzer:** PDH/PDL, PCR, Max Pain calculations.
 
 ## Module 4: Strategy Engine
+- **Base Class:** Abstract foundation for strategies.
+- **Strategies:** Momentum Breakout, Trend Continuation, ORB.
+- **Wiring:** Automated signal detection on candle close.
+
+## Module 5: Risk Management
 
 ### Architecture Explanation
-The Strategy Engine implements the core trading logic, designed to be modular and extensible.
+The Risk Management module serves as a safety firewall, ensuring the bot adheres to capital protection rules.
 
-- **Base Strategy (`strategies/base_strategy.py`):** An abstract base class that defines the interface for all strategies, ensuring consistency in entry/exit checks and data handling.
-- **Indicators (`strategies/indicators.py`):** A collection of optimized technical indicator functions (VWAP, EMA, HHHL) used by the strategies.
-- **Implemented Strategies:**
-  - **Momentum Breakout (Strategy A):** Focuses on price breakout above VWAP with volume and OI confirmation.
-  - **Trend Continuation (Strategy B):** Captures pullbacks to the EMA zone within an established trend.
-  - **Opening Range Breakout (Strategy C):** Trades the break of the initial 15-minute range with volume support.
-
-### Testing Instructions
-Verify strategy signals with mock data:
-```bash
-python3 -m pytest tests/test_strategies.py
-```
+- **Risk Manager (`risk/risk_manager.py`):**
+  - **Capital Protection:** Enforces maximum 1% risk per trade and 3% daily drawdown.
+  - **Trade Limits:** Restricts the bot to a maximum of 5 trades per day.
+  - **Time-Based Exit:** Prevents new trades after 15:15 and prepares for session square-off.
+  - **Volatility Filter:** Optionally blocks trades during extreme market volatility (India VIX filter).
+  - **Auto-Shutdown:** Automatically disables signal processing if daily loss limits are hit.
 
 ### Folder Structure
 ```
-/strategies
-  - base_strategy.py
-  - indicators.py
-  - momentum_breakout.py
-  - trend_continuation.py
-  - opening_range_breakout.py
+/risk
+  - risk_manager.py
+```
+
+### Testing Instructions
+Verify risk logic and limit enforcement:
+```bash
+python3 -m pytest tests/test_risk.py
 ```
