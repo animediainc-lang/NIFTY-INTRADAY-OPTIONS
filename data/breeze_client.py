@@ -44,7 +44,7 @@ class BreezeClient:
         self._initialize_sdk()
         return self.breeze.get_option_chain(**kwargs)
 
-    def get_historical_data(self, stock_code: str, exchange_code: str, interval: str, from_date: str, to_date: str) -> Dict[str, Any]:
+    def get_historical_data(self, stock_code: str, exchange_code: str, interval: str, from_date: str, to_date: str, product_type: str = "options") -> Dict[str, Any]:
         self._initialize_sdk()
         interval_map = {
             "1": "1minute", "5": "5minute", "30": "30minute",
@@ -57,7 +57,7 @@ class BreezeClient:
             to_date=to_date,
             stock_code=stock_code,
             exchange_code=exchange_code,
-            product_type="options"
+            product_type=product_type
         )
 
 # Global client
