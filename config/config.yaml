@@ -1,0 +1,30 @@
+# Breeze API Credentials
+breeze:
+  api_key: "YOUR_API_KEY"
+  api_secret: "YOUR_API_SECRET"
+  session_token: "YOUR_SESSION_TOKEN"
+
+# Trading Parameters
+trading:
+  symbol: "NIFTY"
+  exchange: "NSE"
+  product_type: "options"
+  strategy_a_enabled: true
+  strategy_b_enabled: true
+  strategy_c_enabled: true
+
+# Risk Management
+risk:
+  max_risk_per_trade_pct: 1.0
+  max_daily_drawdown_pct: 3.0
+  max_trades_per_day: 5
+  trailing_stop_loss: true
+
+# Telegram Notifications
+telegram:
+  bot_token: "YOUR_BOT_TOKEN"
+  chat_id: "YOUR_CHAT_ID"
+
+# Database
+database:
+  url: "sqlite:///database/trading_bot.db"
