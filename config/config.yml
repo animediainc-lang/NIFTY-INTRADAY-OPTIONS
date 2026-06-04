@@ -1,0 +1,23 @@
+# Breeze API Credentials
+breeze:
+  api_key: "YOUR_API_KEY"
+  secret_key: "YOUR_SECRET_KEY"
+  session_token: "YOUR_SESSION_TOKEN"
+
+# Telegram Bot Configuration
+telegram:
+  bot_token: "YOUR_BOT_TOKEN"
+  chat_id: "YOUR_CHAT_ID"
+
+# Trading Strategy Parameters
+strategy:
+  nifty_spot_symbol: "NIFTY"
+  timeframe: "1m"
+  risk_per_trade_percent: 1.0
+  max_daily_drawdown_percent: 3.0
+  max_trades_per_day: 5
+
+# System Settings
+system:
+  log_level: "INFO"
+  database_url: "sqlite:///database/nifty_bot.db"

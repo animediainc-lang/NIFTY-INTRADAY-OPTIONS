@@ -1,0 +1,11 @@
+breeze-connect
+PyYAML
+pandas
+requests
+dash
+sqlalchemy
+psycopg2-binary
+python-telegram-bot
+numpy
+matplotlib
+plotly
