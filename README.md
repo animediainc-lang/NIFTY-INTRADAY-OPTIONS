@@ -12,30 +12,25 @@
 - **Analyzer:** PDH/PDL, PCR, Max Pain calculations.
 
 ## Module 4: Strategy Engine
-- **Base Class:** Abstract foundation for strategies.
 - **Strategies:** Momentum Breakout, Trend Continuation, ORB.
 - **Wiring:** Automated signal detection on candle close.
 
 ## Module 5: Risk Management
+- **Risk Manager:** Daily drawdown and trade count enforcement.
+
+## Module 6: Position Sizing
 
 ### Architecture Explanation
-The Risk Management module serves as a safety firewall, ensuring the bot adheres to capital protection rules.
+The Position Sizing module calculates the optimal trade quantity to ensure risk consistency across different trade setups.
 
-- **Risk Manager (`risk/risk_manager.py`):**
-  - **Capital Protection:** Enforces maximum 1% risk per trade and 3% daily drawdown.
-  - **Trade Limits:** Restricts the bot to a maximum of 5 trades per day.
-  - **Time-Based Exit:** Prevents new trades after 15:15 and prepares for session square-off.
-  - **Volatility Filter:** Optionally blocks trades during extreme market volatility (India VIX filter).
-  - **Auto-Shutdown:** Automatically disables signal processing if daily loss limits are hit.
-
-### Folder Structure
-```
-/risk
-  - risk_manager.py
-```
+- **Position Sizer (`risk/position_sizer.py`):**
+  - **Dynamic Quantity Calculation:** Determines the number of lots based on the current capital, risk percentage, and the distance between entry and stop-loss.
+  - **Lot Size Alignment:** Automatically rounds down quantities to the nearest instrument lot size (e.g., multiples of 25 for Nifty).
+  - **Exposure Control:** Enforces a maximum total exposure limit to prevent over-leveraging.
+  - **Margin Check:** Provides a utility to verify if available funds are sufficient for the calculated position.
 
 ### Testing Instructions
-Verify risk logic and limit enforcement:
+Verify lot size logic:
 ```bash
-python3 -m pytest tests/test_risk.py
+python3 -m pytest tests/test_position_sizing.py
 ```
