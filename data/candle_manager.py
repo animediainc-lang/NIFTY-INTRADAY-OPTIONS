@@ -6,18 +6,16 @@ from logger import logger
 class CandleManager:
     def __init__(self, intervals: List[int] = [1, 3, 5]):
         self.intervals = intervals
-        # instrument_key -> interval -> DataFrame (OHLCV + OI)
         self.candles: Dict[str, Dict[int, pd.DataFrame]] = {}
-        # Track last TTQ to calculate interval volume
         self.last_ttq: Dict[str, float] = {}
-        # Callbacks for closed candles
         self.on_candle_closed_callbacks = []
+        # Persistent storage for morning range (09:15 - 09:45)
+        self.morning_candles: Dict[str, Dict[int, pd.DataFrame]] = {}
 
     def add_candle_callback(self, callback):
         self.on_candle_closed_callbacks.append(callback)
 
     def process_tick(self, tick: Dict[str, Any]):
-        """Processes an incoming tick and updates only the necessary candle."""
         try:
             symbol = tick.get("stock_code")
             if not symbol:
@@ -32,7 +30,6 @@ class CandleManager:
 
             timestamp = pd.to_datetime(timestamp_str)
 
-            # Volume delta logic
             if symbol not in self.last_ttq:
                 self.last_ttq[symbol] = current_ttq
                 vol_delta = 0
@@ -42,8 +39,10 @@ class CandleManager:
 
             if symbol not in self.candles:
                 self.candles[symbol] = {
-                    interval: pd.DataFrame(columns=["open", "high", "low", "close", "volume", "oi"])
-                    for interval in self.intervals
+                    i: pd.DataFrame(columns=["open", "high", "low", "close", "volume", "oi"]) for i in self.intervals
+                }
+                self.morning_candles[symbol] = {
+                    i: pd.DataFrame(columns=["open", "high", "low", "close", "volume", "oi"]) for i in self.intervals
                 }
 
             for interval in self.intervals:
@@ -53,24 +52,29 @@ class CandleManager:
             logger.error(f"Error processing tick for {tick.get('stock_code')}: {e}")
 
     def _update_interval_candle(self, symbol: str, interval: int, timestamp: datetime, price: float, vol_delta: float, oi: float):
-        """Updates or creates a candle for a specific interval."""
         candle_start = timestamp.replace(second=0, microsecond=0)
         if interval > 1:
             minute = (candle_start.minute // interval) * interval
             candle_start = candle_start.replace(minute=minute)
 
+        # Update sliding window
         df = self.candles[symbol][interval]
+        self.candles[symbol][interval] = self._apply_update(df, candle_start, price, vol_delta, oi, symbol, interval, True)
 
+        # Update persistent morning window if applicable
+        if candle_start.hour == 9 and candle_start.minute < 45:
+            m_df = self.morning_candles[symbol][interval]
+            self.morning_candles[symbol][interval] = self._apply_update(m_df, candle_start, price, vol_delta, oi, symbol, interval, False)
+
+    def _apply_update(self, df, candle_start, price, vol_delta, oi, symbol, interval, trigger_callback):
         if not df.empty and candle_start in df.index:
-            # Update existing candle
-            df.at[candle_start, "high"] = max(df.at[candle_start, "high"], price)
-            df.at[candle_start, "low"] = min(df.at[candle_start, "low"], price)
+            df.at[candle_start, "high"] = max(float(df.at[candle_start, "high"]), price)
+            df.at[candle_start, "low"] = min(float(df.at[candle_start, "low"]), price)
             df.at[candle_start, "close"] = price
-            df.at[candle_start, "volume"] += vol_delta
+            df.at[candle_start, "volume"] = float(df.at[candle_start, "volume"]) + vol_delta
             df.at[candle_start, "oi"] = oi
         else:
-            # A new candle is starting
-            if not df.empty:
+            if trigger_callback and not df.empty:
                 closed_candle = df.iloc[-1].to_dict()
                 closed_candle['timestamp'] = df.index[-1]
                 closed_candle['symbol'] = symbol
@@ -78,21 +82,24 @@ class CandleManager:
                 for cb in self.on_candle_closed_callbacks:
                     cb(closed_candle)
 
-            # Create new candle
-            new_candle = pd.DataFrame(
+            new_row = pd.DataFrame(
                 [{"open": price, "high": price, "low": price, "close": price, "volume": vol_delta, "oi": oi}],
                 index=[candle_start]
-            )
-            self.candles[symbol][interval] = pd.concat([df, new_candle])
+            ).astype(float)
+            df = pd.concat([df, new_row])
 
-            if len(self.candles[symbol][interval]) > 100:
-                self.candles[symbol][interval] = self.candles[symbol][interval].iloc[-100:]
+            if trigger_callback and len(df) > 100:
+                df = df.iloc[-100:]
+        return df
 
     def get_candles(self, symbol: str, interval: int) -> Optional[pd.DataFrame]:
-        return self.candles.get(symbol, {}).get(interval)
+        df_sliding = self.candles.get(symbol, {}).get(interval)
+        df_morning = self.morning_candles.get(symbol, {}).get(interval)
+        if df_sliding is not None and df_morning is not None:
+             return pd.concat([df_morning, df_sliding]).drop_duplicates().sort_index()
+        return df_sliding
 
     def get_latest_candle(self, symbol: str, interval: int) -> Optional[Dict[str, Any]]:
-        """Returns the most recently closed (not active) candle."""
         df = self.get_candles(symbol, interval)
         if df is not None and len(df) > 1:
             return df.iloc[-2].to_dict()

@@ -5,39 +5,35 @@ from typing import Dict, Any, Optional
 
 class PositionSizer:
     def __init__(self, lot_size: int = 25):
-        self.lot_size = lot_size # Nifty default
-        self.max_exposure = config.get("risk.max_exposure", 500000.0)
+        # Lot size can be overridden by config
+        self._default_lot_size = lot_size
 
-    def calculate_quantity(self, risk_amount: float, entry_price: float, stop_loss: float) -> int:
-        """
-        Calculates the number of units (quantity) based on fixed risk amount.
-        Risk = (Entry - SL) * Quantity
-        Quantity = Risk / (Entry - SL)
-        """
+    def calculate_quantity(self, risk_amount: float, entry_price: float, stop_loss: float, is_option: bool = True) -> int:
         try:
+            lot_size = config.get("trading.lot_size", self._default_lot_size)
+            max_exposure = config.get("risk.max_exposure", 500000.0)
+
             sl_points = abs(entry_price - stop_loss)
             if sl_points == 0:
-                logger.warning("Stop loss points are zero. Cannot calculate quantity.")
                 return 0
 
-            raw_qty = risk_amount / sl_points
+            # Delta factor for ATM options
+            effective_sl = sl_points * 0.5 if is_option else sl_points
 
-            # Round down to nearest multiple of lot size
-            lots = math.floor(raw_qty / self.lot_size)
+            raw_qty = risk_amount / effective_sl
+            lots = math.floor(raw_qty / lot_size)
 
-            # Minimum 1 lot if raw_qty allows it
-            if lots < 1 and raw_qty >= self.lot_size * 0.8: # Allow small buffer
+            if lots < 1 and raw_qty >= lot_size * 0.7:
                  lots = 1
 
-            final_qty = int(lots * self.lot_size)
+            final_qty = int(lots * lot_size)
 
             # Exposure Check
             exposure = final_qty * entry_price
-            if exposure > self.max_exposure:
-                logger.warning(f"Calculated exposure ({exposure}) exceeds max exposure ({self.max_exposure}). Reducing qty.")
-                final_qty = int((self.max_exposure // (entry_price * self.lot_size)) * self.lot_size)
+            if exposure > max_exposure:
+                final_qty = int((max_exposure // (entry_price * lot_size)) * lot_size)
 
-            logger.info(f"Position Sizer: Risk: {risk_amount}, SL Points: {sl_points}, Final Qty: {final_qty} ({lots} lots)")
+            logger.info(f"Position Sizer: Final Qty: {final_qty}")
             return final_qty
 
         except Exception as e:
@@ -45,14 +41,9 @@ class PositionSizer:
             return 0
 
     def check_margin(self, available_margin: float, required_margin_per_lot: float, qty: int) -> bool:
-        """Verifies if enough margin is available for the trade."""
-        lots = qty / self.lot_size
-        total_required = lots * required_margin_per_lot
-
-        if total_required > available_margin:
-            logger.warning(f"Insufficient margin. Required: {total_required}, Available: {available_margin}")
-            return False
-        return True
+        lot_size = config.get("trading.lot_size", self._default_lot_size)
+        lots = qty / lot_size
+        return (lots * required_margin_per_lot) <= available_margin
 
 # Global Position Sizer
 position_sizer = PositionSizer()

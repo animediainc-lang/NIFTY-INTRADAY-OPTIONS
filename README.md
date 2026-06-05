@@ -19,18 +19,31 @@
 - **Risk Manager:** Daily drawdown and trade count enforcement.
 
 ## Module 6: Position Sizing
+- **Sizer:** Automated lot-size calculation based on risk amount and SL points.
+
+## Module 7: Execution Engine
 
 ### Architecture Explanation
-The Position Sizing module calculates the optimal trade quantity to ensure risk consistency across different trade setups.
+The Execution Engine is responsible for the final stage of the trade lifecycle: placing orders and managing open trades.
 
-- **Position Sizer (`risk/position_sizer.py`):**
-  - **Dynamic Quantity Calculation:** Determines the number of lots based on the current capital, risk percentage, and the distance between entry and stop-loss.
-  - **Lot Size Alignment:** Automatically rounds down quantities to the nearest instrument lot size (e.g., multiples of 25 for Nifty).
-  - **Exposure Control:** Enforces a maximum total exposure limit to prevent over-leveraging.
-  - **Margin Check:** Provides a utility to verify if available funds are sufficient for the calculated position.
+- **Order Manager (`execution/order_manager.py`):**
+  - Interfaces with the Breeze API to place Market, Limit, and Stop-Loss orders.
+  - Tracks open portfolio positions.
+  - **Emergency Square Off:** A fail-safe to close all active positions immediately.
+- **Trade Executor (`execution/trade_executor.py`):**
+  - **Signal Coordination:** Orchestrates the flow from Strategy Signal -> Risk Check -> Position Sizing -> Order Placement.
+  - **Trade Lifecycle Management:** Monitros active trades for Target 1 (Partial Profits), Target 2 (Full Exit), and Stop-Loss hits.
+  - **Trailing Stop Loss (TSL):** Automatically moves SL to cost once Target 1 is achieved.
+
+### Folder Structure
+```
+/execution
+  - order_manager.py
+  - trade_executor.py
+```
 
 ### Testing Instructions
-Verify lot size logic:
+Verify order flow and trade management logic:
 ```bash
-python3 -m pytest tests/test_position_sizing.py
+python3 -m pytest tests/test_execution.py
 ```

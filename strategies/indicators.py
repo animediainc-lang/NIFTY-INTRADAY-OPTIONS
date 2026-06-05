@@ -2,10 +2,20 @@ import pandas as pd
 import numpy as np
 
 def calculate_vwap(df: pd.DataFrame) -> pd.Series:
-    """Calculates Volume Weighted Average Price."""
-    v = df['volume'].values
-    tp = (df['high'] + df['low'] + df['close']).values / 3
-    return pd.Series((tp * v).cumsum() / v.cumsum(), index=df.index)
+    """
+    Calculates session-anchored Volume Weighted Average Price.
+    Expects a DatetimeIndex.
+    """
+    df = df.copy()
+    df['tp'] = (df['high'] + df['low'] + df['close']) / 3
+    df['tp_v'] = df['tp'] * df['volume']
+
+    # Cumulative sum anchored by date
+    groups = df.groupby(df.index.date)
+    cum_tp_v = groups['tp_v'].cumsum()
+    cum_v = groups['volume'].cumsum()
+
+    return cum_tp_v / cum_v
 
 def calculate_ema(df: pd.DataFrame, period: int = 20) -> pd.Series:
     """Calculates Exponential Moving Average."""

@@ -6,20 +6,21 @@ class TestPositionSizing(unittest.TestCase):
         self.ps = PositionSizer(lot_size=25)
 
     def test_quantity_calculation(self):
-        # Risk 1000, SL 10 points -> Qty 100 (4 lots)
-        qty = self.ps.calculate_quantity(risk_amount=1000, entry_price=100, stop_loss=90)
-        self.assertEqual(qty, 100)
+        # Risk 1000, SL 10 points (Spot), is_option=True
+        # Eff SL = 10 * 0.5 = 5.0
+        # Qty = 1000 / 5.0 = 200 (8 lots)
+        qty = self.ps.calculate_quantity(risk_amount=1000, entry_price=100, stop_loss=90, is_option=True)
+        self.assertEqual(qty, 200)
 
     def test_rounding_down(self):
-        # Risk 1000, SL 15 points -> Raw Qty 66.6 -> Round to 50 (2 lots)
-        qty = self.ps.calculate_quantity(risk_amount=1000, entry_price=100, stop_loss=85)
-        self.assertEqual(qty, 50)
+        # Risk 1000, SL 15 points, is_option=True
+        # Eff SL = 15 * 0.5 = 7.5
+        # Raw Qty = 1000 / 7.5 = 133.3 -> 125 (5 lots)
+        qty = self.ps.calculate_quantity(risk_amount=1000, entry_price=100, stop_loss=85, is_option=True)
+        self.assertEqual(qty, 125)
 
     def test_max_exposure_limit(self):
-        # Risk 5000, SL 5 points -> Qty 1000.
-        # But if entry is 20000, exposure is 200,000,000.
-        # Default max exposure is 500,000.
-        qty = self.ps.calculate_quantity(risk_amount=5000, entry_price=20000, stop_loss=19995)
+        qty = self.ps.calculate_quantity(risk_amount=5000, entry_price=20000, stop_loss=19995, is_option=True)
         self.assertLessEqual(qty * 20000, 500000)
 
     def test_margin_check(self):
