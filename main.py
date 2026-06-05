@@ -11,6 +11,7 @@ from risk.risk_manager import risk_manager
 from execution.trade_executor import trade_executor
 from execution.order_manager import order_manager
 from database.db_manager import db_manager
+from telegram.telegram_notifier import notifier
 from app_config.config_loader import config
 from logger import logger
 import sys
@@ -36,17 +37,12 @@ class TradingBot:
     def on_tick_received(self, tick):
         symbol_key = candle_manager.get_instrument_key(tick)
         last_price = float(tick.get("last", 0))
-
-        # Monitor trades based on the incoming tick's price
         trade_executor.manage_active_trades({symbol_key: last_price})
-
-        # Update candles
         candle_manager.process_tick(tick)
 
     def on_candle_closed(self, candle):
         symbol_key = candle['symbol_key']
 
-        # Only run strategies on Spot candles (e.g., NIFTY_0_Spot)
         if symbol_key == f"{self.spot_symbol}_0_Spot":
             for strategy in self.strategies:
                 df = candle_manager.get_candles(symbol_key, candle['interval'])
@@ -81,8 +77,6 @@ class TradingBot:
                         )
 
                 elif signal == "SELL":
-                    # This maps to all active trades for this strategy on the symbol
-                    # Simplification: Close all variants of the spot symbol for this strategy
                     for trade_key in list(trade_executor.active_trades.keys()):
                         if trade_key.startswith(self.spot_symbol) and strategy.name in trade_key:
                             logger.info(f"EXIT SIGNAL: {strategy.name} on {symbol_key}")
@@ -102,10 +96,13 @@ class TradingBot:
 
             if not breeze_client.generate_session():
                 logger.error("Failed to generate session.")
+                notifier.notify_error("Failed to generate Breeze session.")
                 return
 
             self.expiry_date = config.get("trading.expiry_date", datetime.now().strftime("%Y-%m-%dT00:00:00.000Z"))
             self.pre_market_metrics = pre_market_analyzer.run_full_analysis(self.expiry_date)
+            db_manager.log_daily_metrics(self.pre_market_metrics)
+            notifier.notify_market_open(self.pre_market_metrics)
 
             candle_manager.add_candle_callback(self.on_candle_closed)
             ws_manager.add_callback(self.on_tick_received)
@@ -126,8 +123,10 @@ class TradingBot:
             logger.info("Shutting down... Squaring off positions.")
             order_manager.emergency_square_off()
             ws_manager.disconnect()
+            notifier.send_message("🛑 *Bot Shutdown* initiated.")
         except Exception as e:
             logger.error(f"Error in main bot loop: {e}")
+            notifier.notify_error(str(e))
 
 def main():
     bot = TradingBot()
