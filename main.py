@@ -10,6 +10,7 @@ from strategies.ai_filter import ai_filter
 from risk.risk_manager import risk_manager
 from execution.trade_executor import trade_executor
 from execution.order_manager import order_manager
+from database.db_manager import db_manager
 from app_config.config_loader import config
 from logger import logger
 import sys
@@ -33,42 +34,44 @@ class TradingBot:
         logger.info(f"Loaded {len(self.strategies)} strategies.")
 
     def on_tick_received(self, tick):
-        symbol = tick.get("stock_code")
+        symbol_key = candle_manager.get_instrument_key(tick)
         last_price = float(tick.get("last", 0))
-        trade_executor.manage_active_trades({symbol: last_price})
+
+        # Monitor trades based on the incoming tick's price
+        trade_executor.manage_active_trades({symbol_key: last_price})
+
+        # Update candles
         candle_manager.process_tick(tick)
 
     def on_candle_closed(self, candle):
-        symbol = candle['symbol']
+        symbol_key = candle['symbol_key']
 
-        if symbol == self.spot_symbol:
+        # Only run strategies on Spot candles (e.g., NIFTY_0_Spot)
+        if symbol_key == f"{self.spot_symbol}_0_Spot":
             for strategy in self.strategies:
-                df = candle_manager.get_candles(symbol, candle['interval'])
+                df = candle_manager.get_candles(symbol_key, candle['interval'])
                 strategy.update_data(df)
 
                 signal = strategy.get_signal()
 
                 if signal == "BUY":
-                    # 1. Risk Manager Check
                     if not risk_manager.check_execution_risk():
                         continue
 
-                    # 2. AI Decision Filter Check
-                    scores = ai_filter.generate_score(strategy.name, symbol, self.pre_market_metrics)
-                    logger.info(f"AI Score for {strategy.name}: {scores['quality_score']}")
+                    scores = ai_filter.generate_score(strategy.name, symbol_key, self.pre_market_metrics)
+                    db_manager.log_signal(symbol_key, strategy.name, "BUY", candle['close'], scores['quality_score'])
 
                     if scores['quality_score'] < 75:
                         logger.warning(f"Trade filtered by AI (Score: {scores['quality_score']})")
                         continue
 
-                    # 3. Execution
                     option_details = option_manager.get_atm_strike(candle['close'], signal)
                     if option_details:
-                        logger.info(f"ENTRY SIGNAL: {strategy.name} on {symbol} -> ATM {option_details['right']}")
+                        logger.info(f"ENTRY SIGNAL: {strategy.name} -> ATM {option_details['right']}")
                         trade_executor.execute_signal(
                             signal="BUY",
                             strategy_name=strategy.name,
-                            symbol=symbol,
+                            symbol=self.spot_symbol,
                             current_price=candle['close'],
                             stop_loss=candle['close'] - 30,
                             expiry_date=self.expiry_date,
@@ -78,16 +81,18 @@ class TradingBot:
                         )
 
                 elif signal == "SELL":
-                    trade_key = f"{symbol}_{strategy.name}"
-                    if trade_key in trade_executor.active_trades:
-                        logger.info(f"EXIT SIGNAL: {strategy.name} on {symbol}")
-                        trade_executor.execute_signal(
-                            signal="SELL",
-                            strategy_name=strategy.name,
-                            symbol=symbol,
-                            current_price=candle['close'],
-                            stop_loss=0
-                        )
+                    # This maps to all active trades for this strategy on the symbol
+                    # Simplification: Close all variants of the spot symbol for this strategy
+                    for trade_key in list(trade_executor.active_trades.keys()):
+                        if trade_key.startswith(self.spot_symbol) and strategy.name in trade_key:
+                            logger.info(f"EXIT SIGNAL: {strategy.name} on {symbol_key}")
+                            trade_executor.execute_signal(
+                                signal="SELL",
+                                strategy_name=strategy.name,
+                                symbol=self.spot_symbol,
+                                current_price=candle['close'],
+                                stop_loss=0
+                            )
 
     def start(self):
         try:
@@ -101,7 +106,6 @@ class TradingBot:
 
             self.expiry_date = config.get("trading.expiry_date", datetime.now().strftime("%Y-%m-%dT00:00:00.000Z"))
             self.pre_market_metrics = pre_market_analyzer.run_full_analysis(self.expiry_date)
-            logger.info(f"Pre-market metrics: {self.pre_market_metrics}")
 
             candle_manager.add_candle_callback(self.on_candle_closed)
             ws_manager.add_callback(self.on_tick_received)

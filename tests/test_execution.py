@@ -16,15 +16,18 @@ class TestExecution(unittest.TestCase):
         mock_qty.return_value = 50
         mock_place.return_value = {"Status": 200, "Success": {"order_id": "12345"}}
 
+        # Spot signal on NIFTY
         self.executor.execute_signal("BUY", "TestStrategy", "NIFTY", 100, 90)
 
-        trade_key = "NIFTY_TestStrategy"
+        # Trade key now includes strike and right (default 0 and Spot for this call)
+        trade_key = "NIFTY_0_Spot_TestStrategy"
         self.assertIn(trade_key, self.executor.active_trades)
         self.assertEqual(self.executor.active_trades[trade_key]["quantity"], 50)
 
     @patch('execution.order_manager.order_manager.place_order')
     def test_target_booking(self, mock_place):
-        trade_key = "TEST_Strat"
+        # We need a key that follows the new format for manage_active_trades to find it
+        trade_key = "TEST_0_Spot_Strat"
         self.executor.active_trades[trade_key] = {
             "symbol": "TEST",
             "strategy": "Strat",
@@ -37,12 +40,12 @@ class TestExecution(unittest.TestCase):
             "exchange": "NFO",
             "expiry_date": "",
             "strike_price": "0",
-            "right": "Call"
+            "right": "Spot"
         }
         mock_place.return_value = {"Status": 200}
 
-        # Price hits Target 1
-        self.executor.manage_active_trades({"TEST": 115})
+        # Price hits Target 1. manage_active_trades expects keys like "TEST_0_Spot"
+        self.executor.manage_active_trades({"TEST_0_Spot": 115})
 
         self.assertTrue(self.executor.active_trades[trade_key]["partial_booked"])
         self.assertEqual(self.executor.active_trades[trade_key]["quantity"], 50)

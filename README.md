@@ -9,7 +9,7 @@
 - **Candles:** Incremental OHLCV+OI generation.
 
 ## Module 3: Pre-Market Analysis Layer
-- **Analyzer:** PDH/PDL, PCR, Max Pain calculations.
+- **Analyzer:** PDH/PDL, PCR, Max Pain, and India VIX calculations.
 
 ## Module 4: Strategy Engine
 - **Strategies:** Momentum Breakout, Trend Continuation, ORB.
@@ -19,31 +19,35 @@
 - **Risk Manager:** Daily drawdown and trade count enforcement.
 
 ## Module 6: Position Sizing
-- **Sizer:** Automated lot-size calculation based on risk amount and SL points.
+- **Sizer:** Automated lot-size calculation with Option Delta proxy.
 
 ## Module 7: Execution Engine
+- **Order Manager:** Breeze API interface with emergency square-off.
+- **Trade Executor:** End-to-end lifecycle management (SL/TSL/Targets).
+
+## Module 8: AI Decision Filter
+- **AI Filter:** Generates quality scores (0-100) to filter trades.
+
+## Module 9: Database Logging
 
 ### Architecture Explanation
-The Execution Engine is responsible for the final stage of the trade lifecycle: placing orders and managing open trades.
+The Database module provides persistent storage for all system activities, enabling post-trade analysis and performance tracking.
 
-- **Order Manager (`execution/order_manager.py`):**
-  - Interfaces with the Breeze API to place Market, Limit, and Stop-Loss orders.
-  - Tracks open portfolio positions.
-  - **Emergency Square Off:** A fail-safe to close all active positions immediately.
-- **Trade Executor (`execution/trade_executor.py`):**
-  - **Signal Coordination:** Orchestrates the flow from Strategy Signal -> Risk Check -> Position Sizing -> Order Placement.
-  - **Trade Lifecycle Management:** Monitros active trades for Target 1 (Partial Profits), Target 2 (Full Exit), and Stop-Loss hits.
-  - **Trailing Stop Loss (TSL):** Automatically moves SL to cost once Target 1 is achieved.
+- **Database Manager (`database/db_manager.py`):**
+  - **SQLite Integration:** Uses a local SQLite database (`database/trading_bot.db`).
+  - **Trade Logging:** Records every entry, exit, and partial profit booking with PnL.
+  - **Signal Tracking:** Stores every strategy signal and its corresponding AI quality score.
+  - **Metrics Storage:** Saves daily pre-market analysis results (PCR, VIX, Max Pain).
 
 ### Folder Structure
 ```
-/execution
-  - order_manager.py
-  - trade_executor.py
+/database
+  - db_manager.py
+  - trading_bot.db (Generated at runtime)
 ```
 
 ### Testing Instructions
-Verify order flow and trade management logic:
+Verify database operations:
 ```bash
-python3 -m pytest tests/test_execution.py
+python3 -m pytest tests/test_database.py
 ```

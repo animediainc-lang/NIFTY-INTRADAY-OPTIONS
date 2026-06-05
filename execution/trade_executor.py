@@ -1,20 +1,23 @@
 from execution.order_manager import order_manager
 from risk.risk_manager import risk_manager
 from risk.position_sizer import position_sizer
+from database.db_manager import db_manager
 from logger import logger
 from typing import Dict, Any, Optional
 
 class TradeExecutor:
     def __init__(self):
-        # Key: symbol + strategy_name
+        # Key: symbol_key + strategy_name
         self.active_trades: Dict[str, Dict[str, Any]] = {}
 
     def execute_signal(self, signal: str, strategy_name: str, symbol: str,
                        current_price: float, stop_loss: float,
                        expiry_date: str = "", strike_price: str = "0",
-                       right: str = "others", exchange: str = "NFO"):
+                       right: str = "Spot", exchange: str = "NFO"):
         """Process a BUY/SELL signal and manage execution."""
-        trade_key = f"{symbol}_{strategy_name}"
+        # For execution, we care about the specific contract.
+        # But signals are on Spot.
+        trade_key = f"{symbol}_{strike_price}_{right}_{strategy_name}"
 
         if signal == "BUY":
             self._handle_buy(trade_key, strategy_name, symbol, current_price, stop_loss, expiry_date, strike_price, right, exchange)
@@ -26,8 +29,8 @@ class TradeExecutor:
             return
 
         risk_amt = risk_manager.get_max_risk_amount()
-        # Indicate this is an option trade for correct sizing (applying delta factor)
-        quantity = position_sizer.calculate_quantity(risk_amt, entry_price, stop_loss, is_option=True)
+        is_option = (right != "Spot")
+        quantity = position_sizer.calculate_quantity(risk_amt, entry_price, stop_loss, is_option=is_option)
 
         if quantity <= 0:
             return
@@ -40,7 +43,7 @@ class TradeExecutor:
             quantity=quantity,
             expiry_date=expiry,
             strike_price=strike,
-            right=right
+            right=right if is_option else "others"
         )
 
         if response.get("Status") == 200:
@@ -60,10 +63,10 @@ class TradeExecutor:
                 "target_2": entry_price + (entry_price - stop_loss) * 3.0,
                 "partial_booked": False
             }
-            logger.info(f"TRADE OPENED: {trade_key} at {entry_price}")
+            logger.info(f"TRADE OPENED: {trade_key}")
+            db_manager.log_trade(trade_key, strategy_name, "BUY", entry_price, quantity, status="OPEN")
 
     def _handle_sell(self, trade_key, exit_price: Optional[float] = None):
-        """Standard exit signal handler."""
         if trade_key in self.active_trades:
             trade = self.active_trades[trade_key]
             order_manager.place_order(
@@ -74,23 +77,30 @@ class TradeExecutor:
                 quantity=trade["quantity"],
                 expiry_date=trade["expiry_date"],
                 strike_price=trade["strike_price"],
-                right=trade["right"]
+                right=trade["right"] if trade["right"] != "Spot" else "others"
             )
 
+            pnl = 0
             if exit_price:
-                # IMPORTANT: PnL from Spot-referenced trades must be scaled by Delta (0.5)
-                # because 1 point in spot is approx 0.5 in option premium.
-                pnl = (exit_price - trade["entry_price"]) * trade["quantity"] * 0.5
+                # Delta factor 0.5 for options, 1.0 for spot
+                delta = 0.5 if trade["right"] != "Spot" else 1.0
+                pnl = (exit_price - trade["entry_price"]) * trade["quantity"] * delta
                 risk_manager.update_pnl(pnl)
 
+            db_manager.log_trade(trade_key, trade["strategy"], "SELL", exit_price or 0, trade["quantity"], pnl, status="CLOSED")
             del self.active_trades[trade_key]
             logger.info(f"TRADE CLOSED: {trade_key}")
 
     def manage_active_trades(self, current_prices: Dict[str, float]):
-        """Manages Targets, TSL, and Partial Profits."""
+        """
+        Manages Targets, TSL.
+        Note: current_prices key should be the symbol_key (Stock_Strike_Right)
+        """
         for trade_key, trade in list(self.active_trades.items()):
-            symbol = trade["symbol"]
-            price = current_prices.get(symbol)
+            # Important: The trade is based on Spot price logic,
+            # so we monitor the Spot price for this trade.
+            spot_key = f"{trade['symbol']}_0_Spot"
+            price = current_prices.get(spot_key)
             if not price:
                 continue
 
@@ -100,28 +110,29 @@ class TradeExecutor:
                 self._handle_sell(trade_key, exit_price=price)
                 continue
 
-            # 2. Check Target 1 (Partial Booking 50%)
+            # 2. Check Target 1
             if not trade["partial_booked"] and price >= trade["target_1"]:
                 book_qty = trade["quantity"] // 2
                 if book_qty > 0:
                     order_manager.place_order(
-                        stock_code=symbol,
+                        stock_code=trade["symbol"],
                         exchange_code=trade["exchange"],
                         action="sell",
                         order_type="market",
                         quantity=book_qty,
                         expiry_date=trade["expiry_date"],
                         strike_price=trade["strike_price"],
-                        right=trade["right"]
+                        right=trade["right"] if trade["right"] != "Spot" else "others"
                     )
                     trade["quantity"] -= book_qty
                     trade["partial_booked"] = True
                     trade["stop_loss"] = trade["entry_price"]
-                    logger.info(f"TARGET 1 HIT for {trade_key}: Booked 50%, SL to cost.")
+                    logger.info(f"TARGET 1 HIT for {trade_key}")
+                    db_manager.log_trade(trade_key, trade["strategy"], "PARTIAL_SELL", price, book_qty, status="PARTIAL")
 
-            # 3. Check Target 2 (Full Exit)
+            # 3. Check Target 2
             if price >= trade["target_2"]:
-                logger.info(f"TARGET 2 HIT for {trade_key}: Full exit.")
+                logger.info(f"TARGET 2 HIT for {trade_key}")
                 self._handle_sell(trade_key, exit_price=price)
 
 # Global Trade Executor

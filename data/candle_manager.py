@@ -9,16 +9,24 @@ class CandleManager:
         self.candles: Dict[str, Dict[int, pd.DataFrame]] = {}
         self.last_ttq: Dict[str, float] = {}
         self.on_candle_closed_callbacks = []
-        # Persistent storage for morning range (09:15 - 09:45)
         self.morning_candles: Dict[str, Dict[int, pd.DataFrame]] = {}
+
+    def get_instrument_key(self, tick: Dict[str, Any]) -> str:
+        """Generates a unique key for the instrument from tick data."""
+        stock = tick.get("stock_code", "")
+        # For options, strike and right are present. For spot, they are not.
+        strike = tick.get("strike_price", "0")
+        right = tick.get("right", "Spot")
+        if right == "others": right = "Spot"
+        return f"{stock}_{strike}_{right}"
 
     def add_candle_callback(self, callback):
         self.on_candle_closed_callbacks.append(callback)
 
     def process_tick(self, tick: Dict[str, Any]):
         try:
-            symbol = tick.get("stock_code")
-            if not symbol:
+            symbol_key = self.get_instrument_key(tick)
+            if not symbol_key:
                 return
 
             last_price = float(tick.get("last", 0))
@@ -30,43 +38,41 @@ class CandleManager:
 
             timestamp = pd.to_datetime(timestamp_str)
 
-            if symbol not in self.last_ttq:
-                self.last_ttq[symbol] = current_ttq
+            if symbol_key not in self.last_ttq:
+                self.last_ttq[symbol_key] = current_ttq
                 vol_delta = 0
             else:
-                vol_delta = max(0, current_ttq - self.last_ttq[symbol])
-                self.last_ttq[symbol] = current_ttq
+                vol_delta = max(0, current_ttq - self.last_ttq[symbol_key])
+                self.last_ttq[symbol_key] = current_ttq
 
-            if symbol not in self.candles:
-                self.candles[symbol] = {
+            if symbol_key not in self.candles:
+                self.candles[symbol_key] = {
                     i: pd.DataFrame(columns=["open", "high", "low", "close", "volume", "oi"]) for i in self.intervals
                 }
-                self.morning_candles[symbol] = {
+                self.morning_candles[symbol_key] = {
                     i: pd.DataFrame(columns=["open", "high", "low", "close", "volume", "oi"]) for i in self.intervals
                 }
 
             for interval in self.intervals:
-                self._update_interval_candle(symbol, interval, timestamp, last_price, vol_delta, last_oi)
+                self._update_interval_candle(symbol_key, interval, timestamp, last_price, vol_delta, last_oi)
 
         except Exception as e:
             logger.error(f"Error processing tick for {tick.get('stock_code')}: {e}")
 
-    def _update_interval_candle(self, symbol: str, interval: int, timestamp: datetime, price: float, vol_delta: float, oi: float):
+    def _update_interval_candle(self, symbol_key: str, interval: int, timestamp: datetime, price: float, vol_delta: float, oi: float):
         candle_start = timestamp.replace(second=0, microsecond=0)
         if interval > 1:
             minute = (candle_start.minute // interval) * interval
             candle_start = candle_start.replace(minute=minute)
 
-        # Update sliding window
-        df = self.candles[symbol][interval]
-        self.candles[symbol][interval] = self._apply_update(df, candle_start, price, vol_delta, oi, symbol, interval, True)
+        df = self.candles[symbol_key][interval]
+        self.candles[symbol_key][interval] = self._apply_update(df, candle_start, price, vol_delta, oi, symbol_key, interval, True)
 
-        # Update persistent morning window if applicable
         if candle_start.hour == 9 and candle_start.minute < 45:
-            m_df = self.morning_candles[symbol][interval]
-            self.morning_candles[symbol][interval] = self._apply_update(m_df, candle_start, price, vol_delta, oi, symbol, interval, False)
+            m_df = self.morning_candles[symbol_key][interval]
+            self.morning_candles[symbol_key][interval] = self._apply_update(m_df, candle_start, price, vol_delta, oi, symbol_key, interval, False)
 
-    def _apply_update(self, df, candle_start, price, vol_delta, oi, symbol, interval, trigger_callback):
+    def _apply_update(self, df, candle_start, price, vol_delta, oi, symbol_key, interval, trigger_callback):
         if not df.empty and candle_start in df.index:
             df.at[candle_start, "high"] = max(float(df.at[candle_start, "high"]), price)
             df.at[candle_start, "low"] = min(float(df.at[candle_start, "low"]), price)
@@ -77,7 +83,7 @@ class CandleManager:
             if trigger_callback and not df.empty:
                 closed_candle = df.iloc[-1].to_dict()
                 closed_candle['timestamp'] = df.index[-1]
-                closed_candle['symbol'] = symbol
+                closed_candle['symbol_key'] = symbol_key
                 closed_candle['interval'] = interval
                 for cb in self.on_candle_closed_callbacks:
                     cb(closed_candle)
@@ -92,15 +98,15 @@ class CandleManager:
                 df = df.iloc[-100:]
         return df
 
-    def get_candles(self, symbol: str, interval: int) -> Optional[pd.DataFrame]:
-        df_sliding = self.candles.get(symbol, {}).get(interval)
-        df_morning = self.morning_candles.get(symbol, {}).get(interval)
+    def get_candles(self, symbol_key: str, interval: int) -> Optional[pd.DataFrame]:
+        df_sliding = self.candles.get(symbol_key, {}).get(interval)
+        df_morning = self.morning_candles.get(symbol_key, {}).get(interval)
         if df_sliding is not None and df_morning is not None:
              return pd.concat([df_morning, df_sliding]).drop_duplicates().sort_index()
         return df_sliding
 
-    def get_latest_candle(self, symbol: str, interval: int) -> Optional[Dict[str, Any]]:
-        df = self.get_candles(symbol, interval)
+    def get_latest_candle(self, symbol_key: str, interval: int) -> Optional[Dict[str, Any]]:
+        df = self.get_candles(symbol_key, interval)
         if df is not None and len(df) > 1:
             return df.iloc[-2].to_dict()
         return None
