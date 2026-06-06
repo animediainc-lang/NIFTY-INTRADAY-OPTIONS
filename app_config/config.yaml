@@ -10,7 +10,7 @@ trading:
   exchange: "NSE"
   product_type: "options"
   expiry_date: "2023-11-02T00:00:00.000Z"
-  mode: "paper" # Options: "paper", "live"
+  mode: "paper"
   strategy_a_enabled: true
   strategy_b_enabled: true
   strategy_c_enabled: true
@@ -22,7 +22,7 @@ risk:
   max_daily_drawdown_pct: 3.0
   max_trades_per_day: 5
   trailing_stop_loss: true
-  max_exposure: 500000.0
+  max_exposure: 2000000.0 # Increased for Nifty lots
   shutdown_time: "15:15"
   max_vix: 25.0
 

@@ -1,33 +1,43 @@
 # Nifty Intraday Options Trading Bot (Breeze API)
 
-## Core Modules (1-11)
+## System Architecture (Modules 1-12)
 - **Market Data:** WebSocket ticks to candles (1m, 3m, 5m).
 - **Strategies:** Momentum, ORB, Trend Continuation with AI filtering.
-- **Risk & Execution:** Capital protection, auto-sizing, multi-target exits.
-- **Dashboard:** Live web interface (Plotly Dash).
+- **Risk & Execution:** Capital protection (1%), auto-sizing, multi-target exits (Target 1 & 2), TSL.
+- **Dashboard:** Live web interface (Plotly Dash) with Paper/Live mode indicator.
+- **Database:** SQLite persistence for trades, signals, and metrics.
 - **Notifications:** Real-time Telegram alerts.
+- **Backtesting:** High-fidelity simulation engine for strategy validation.
 
-## Paper Trading vs. Live Mode
+## Backtesting Engine
 
-The bot supports two execution modes, configurable via `app_config/config.yaml`:
+### Architecture Explanation
+The Backtesting module allows for rigorous validation of strategies using historical data before live deployment.
 
-### 1. Paper Trading (Default)
-- **Setting:** `trading.mode: "paper"`
-- **Behavior:** Bypasses the Breeze API for order placement. Simulates successful entries and exits with a `PAPER_` prefix in the Order ID.
-- **Purpose:** Test strategies and system wiring without financial risk.
+- **Backtest Engine (`backtesting/engine.py`):**
+  - Simulates the entire trading loop, including signal generation, risk validation, and order execution.
+  - Supports configurable Stop-Loss and Take-Profit points.
+  - Accounts for option delta proxies to estimate realistic PnL for Nifty options.
+- **Report Generator (`backtesting/report_generator.py`):**
+  - Calculates ROI, Win Rate, Max Drawdown, Sharpe Ratio, and Expectancy.
+  - Formats results into professional tabular reports.
 
-### 2. Live Trading
-- **Setting:** `trading.mode: "live"`
-- **Behavior:** Executes real trades via the ICICI Direct Breeze API.
-- **Warning:** A critical warning is logged at startup. Ensure all risk parameters are verified before enabling.
-
-### Dashboard Indicator
-The dashboard header displays a prominent status tag:
-- **YELLOW:** Paper Trading Mode.
-- **RED:** Live Trading Mode.
-
-## Testing Instructions
-Verify mode switching logic:
+### Running a Backtest
+To execute a backtest simulation:
 ```bash
-python3 -m pytest tests/test_paper_trading.py
+python3 backtesting/run_backtest.py
+```
+
+### Folder Structure
+```
+/backtesting
+  - engine.py
+  - report_generator.py
+  - run_backtest.py
+```
+
+### Backtest Verification
+Verify the engine logic with unit tests:
+```bash
+python3 -m pytest tests/test_backtesting.py
 ```
