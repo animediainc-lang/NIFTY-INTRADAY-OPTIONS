@@ -1,6 +1,8 @@
 from data.breeze_client import breeze_client
+from app_config.config_loader import config
 from logger import logger
 from typing import Dict, Any, List, Optional
+import uuid
 
 class OrderManager:
     def __init__(self):
@@ -12,10 +14,15 @@ class OrderManager:
                     expiry_date: str = "", strike_price: str = "0",
                     right: str = "others") -> Dict[str, Any]:
         """
-        Places an order via Breeze API.
-        action: 'buy' or 'sell'
-        order_type: 'market', 'limit', 'stoploss'
+        Places an order via Breeze API or simulates it in Paper Trading mode.
         """
+        mode = config.get("trading.mode", "paper")
+
+        if mode == "paper":
+            order_id = f"PAPER_{uuid.uuid4().hex[:8]}"
+            logger.info(f"PAPER ORDER: {action} {quantity} {stock_code} at {price or 'MARKET'} ID: {order_id}")
+            return {"Status": 200, "Success": {"order_id": order_id}}
+
         try:
             response = breeze_client.breeze.place_order(
                 stock_code=stock_code,
@@ -34,18 +41,22 @@ class OrderManager:
 
             if response.get("Status") == 200:
                 order_id = response.get("Success", {}).get("order_id")
-                logger.info(f"Order placed successfully: {action} {quantity} {stock_code} ID: {order_id}")
+                logger.info(f"LIVE ORDER PLACED: {action} {quantity} {stock_code} ID: {order_id}")
                 return response
             else:
-                logger.error(f"Order placement failed: {response.get('Error')}")
+                logger.error(f"LIVE ORDER FAILED: {response.get('Error')}")
                 return response
 
         except Exception as e:
-            logger.error(f"Exception while placing order: {e}")
+            logger.error(f"Exception while placing live order: {e}")
             return {"Status": 500, "Error": str(e)}
 
     def get_positions(self) -> List[Dict[str, Any]]:
         """Fetches current open positions from the broker."""
+        mode = config.get("trading.mode", "paper")
+        if mode == "paper":
+            return [] # In a advanced system, we would track paper positions in DB/Memory
+
         try:
             response = breeze_client.breeze.get_portfolio_positions()
             if response.get("Status") == 200:

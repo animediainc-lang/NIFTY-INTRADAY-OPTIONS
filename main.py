@@ -86,6 +86,13 @@ class TradingBot:
     def start(self):
         try:
             config.load_config("app_config/config.yaml")
+            mode = config.get("trading.mode", "paper").upper()
+            if mode == "LIVE":
+                logger.critical("!!! BOT STARTING IN LIVE TRADING MODE !!!")
+                time.sleep(2)
+            else:
+                logger.info("Bot starting in PAPER TRADING mode.")
+
             self.spot_symbol = config.get("trading.symbol", "NIFTY")
             self._load_strategies()
             if not breeze_client.generate_session():
