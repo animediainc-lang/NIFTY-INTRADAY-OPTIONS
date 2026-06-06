@@ -1,0 +1,9 @@
+breeze-connect
+pyyaml
+pandas
+requests
+python-dotenv
+pytest
+numpy
+dash
+plotly
