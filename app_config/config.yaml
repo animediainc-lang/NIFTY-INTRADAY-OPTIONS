@@ -1,0 +1,46 @@
+# System Configuration
+app:
+  name: "Nifty-MultiAgent-Options"
+  version: "1.0.0"
+  environment: "development"
+
+trading:
+  mode: "paper" # "paper" or "live"
+  lot_size: 25 # Nifty 50 lot size
+  max_active_positions: 2
+  capital: 100000.0 # Initial paper capital in INR
+
+broker:
+  name: "zerodha" # "zerodha", "openalgo", or "mock"
+  api_key: "MOCK_API_KEY"
+  api_secret: "MOCK_API_SECRET"
+  access_token: "MOCK_ACCESS_TOKEN"
+
+llm:
+  provider: "anthropic" # "anthropic" or "mock"
+  model: "claude-3-5-sonnet-20241022"
+  api_key: "MOCK_LLM_KEY"
+  temperature: 0.1
+  timeout: 10
+
+risk:
+  max_risk_per_trade_pct: 1.0 # Max 1% of total capital per trade
+  max_daily_loss_pct: 3.0 # Max 3% daily drawdown limit
+  max_consecutive_losses: 3 # Kill switch trigger
+  auto_square_off_time: "15:15"
+  no_new_entries_time: "14:45"
+  india_vix_max_threshold: 28.0
+
+costs:
+  brokerage_per_order: 20.0 # Fixed ₹20 per order
+  stt_sell_pct: 0.0625 # STT 0.0625% on option premium (sell side)
+  exchange_turnover_pct: 0.053 # NSE exchange charge % on premium
+  sebi_charge_pct: 0.0001 # SEBI turnover fee %
+  stamp_duty_buy_pct: 0.003 # Stamp duty on buy premium %
+  gst_pct: 18.0 # 18% GST on brokerage + exchange charges
+  slippage_points: 0.5 # Estimated slippage per trade in points
+
+dashboard:
+  host: "127.0.0.1"
+  port: 8050
+  debug: false
