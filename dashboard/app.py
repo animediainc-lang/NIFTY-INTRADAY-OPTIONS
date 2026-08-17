@@ -175,4 +175,4 @@ def update_dashboard_data(n):
     return equity_fig, vix_pcr_fig, trades_table, debates_table
 
 if __name__ == "__main__":
-    app.run_server(debug=False, port=8050)
+    app.run(debug=False, port=8050)
