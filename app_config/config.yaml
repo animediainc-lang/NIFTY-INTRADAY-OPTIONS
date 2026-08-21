@@ -1,0 +1,55 @@
+system:
+  name: "Nifty-MultiAgent-AI-Trader"
+  environment: "paper" # "paper" or "live"
+  log_level: "INFO"
+  time_zone: "Asia/Kolkata"
+
+trading:
+  symbol: "NIFTY"
+  exchange: "NSE"
+  underlying_index: "NIFTY 50"
+  lot_size: 25 # Current Nifty 50 lot size
+  max_positions: 2
+  default_capital: 500000.0 # INR 5 Lakhs paper balance
+  trading_hours:
+    start_time: "09:15"
+    end_time: "15:30"
+    no_new_entries_after: "14:45"
+    force_square_off: "15:15"
+
+broker:
+  active_broker: "paper" # options: "paper", "icici_breeze", "upstox", "openalgo"
+  api_key: "${BROKER_API_KEY}"
+  api_secret: "${BROKER_API_SECRET}"
+  session_token: "${BROKER_SESSION_TOKEN}"
+  openalgo_url: "http://127.0.0.1:5000"
+
+ai_brain:
+  provider: "anthropic"
+  model: "claude-3-5-sonnet-20241022"
+  api_key: "${ANTHROPIC_API_KEY}"
+  temperature: 0.2
+  max_tokens: 1500
+  agent_debate_rounds: 2
+  consensus_threshold: 0.75 # 75% agreement required for signal approval
+
+risk_management:
+  max_risk_per_trade_pct: 1.0 # 1% of total capital
+  max_daily_loss_pct: 3.0     # 3% maximum daily drawdown -> Kill switch
+  max_drawdown_hard_stop_pct: 10.0
+  max_open_lots: 4
+  default_sl_points: 30.0
+  default_tp_points: 60.0
+  trail_sl_trigger_rr: 1.5
+  kill_switch_active: false
+
+costs:
+  brokerage_per_order: 20.0 # Flat INR 20 per executed order
+  stt_options_sell_pct: 0.125 # STT on premium sell (0.125%)
+  exchange_txn_fee_pct: 0.05 # Exchange transaction charges
+  gst_pct: 18.0 # 18% GST on (Brokerage + Txn fee)
+  stamp_duty_buy_pct: 0.003 # 0.003% stamp duty on buy side
+  slippage_points: 1.5 # Simulated slippage per option leg in points
+
+database:
+  db_path: "database/trading_system.db"
